@@ -18,6 +18,10 @@ type Config struct {
 
 // LoadConfig загружает конфигурацию из переменных окружения.
 func LoadConfig(logger *slog.Logger) (*Config, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	// Чтение переменных окружения
 	botToken := os.Getenv("BOT_TOKEN")
 	chatIDStr := os.Getenv("CHAT_ID")
@@ -26,26 +30,26 @@ func LoadConfig(logger *slog.Logger) (*Config, error) {
 	// Проверка наличия обязательных переменных
 	if botToken == "" || chatIDStr == "" {
 		logger.Error("Необходимые переменные окружения отсутствуют",
-			"BOT_TOKEN", maskToken(botToken), "CHAT_ID", chatIDStr)
+			"bot_token", maskToken(botToken), "chat_id", chatIDStr)
 		return nil, errors.New("необходимые переменные окружения отсутствуют")
 	}
 
 	// Преобразование CHAT_ID в int64
 	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
 	if err != nil {
-		logger.Error("Ошибка преобразования CHAT_ID в int64", "error", err)
+		logger.Error("Ошибка преобразования CHAT_ID в int64", "err", err)
 		return nil, err
 	}
 
 	// Валидируем токен бота
 	if err := validators.ValidateBotToken(botToken); err != nil {
-		logger.Error("Невалидный токен бота", "error", err)
+		logger.Error("Невалидный токен бота", "err", err)
 		return nil, err
 	}
 
 	// Валидируем ID чата
 	if err := validators.ValidateChatID(chatID); err != nil {
-		logger.Error("Невалидный ID чата", "error", err)
+		logger.Error("Невалидный ID чата", "err", err)
 		return nil, err
 	}
 

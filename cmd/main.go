@@ -9,6 +9,7 @@ import (
 	"telegram-quotes-bot/internal/adapters"
 	"telegram-quotes-bot/internal/config"
 	"telegram-quotes-bot/internal/usecases"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
@@ -38,21 +39,17 @@ func main() {
 	// Загрузка конфигурации
 	cfg, err := config.LoadConfig(logger)
 	if err != nil {
-		logger.Error("Ошибка загрузки конфигурации", "error", err)
+		logger.Error("Ошибка загрузки конфигурации", "err", err)
 		os.Exit(1)
 	}
 
 	// Инициализация адаптеров
-	quoteAPI := adapters.NewForismaticAPI()
-	telegramAdapter, err := adapters.NewTelegramAdapter(cfg.BotToken, cfg.ChatID)
-	if err != nil {
-		logger.Error("Не удалось инициализировать TelegramAdapter", "error", err)
-		os.Exit(1)
-	}
+	quoteAPI := adapters.NewForismaticAPI(logger)
+	telegramAdapter := adapters.NewTelegramAdapter(cfg.BotToken, cfg.ChatID, logger)
 
 	// Инициализация сервисов
-	fetchQuoteService := usecases.NewFetchQuoteService(quoteAPI)
-	sendQuoteService := usecases.NewSendQuoteService(telegramAdapter)
+	fetchQuoteService := usecases.NewFetchQuoteService(quoteAPI, logger)
+	sendQuoteService := usecases.NewSendQuoteService(telegramAdapter, logger)
 
 	// Планировщик Cron
 	c := cron.New()
@@ -60,24 +57,18 @@ func main() {
 
 	// Задача отправки цитат
 	_, err = c.AddFunc("0 4,8,14,18 * * *", func() {
-		taskCtx := context.Background()
+		taskCtx, taskCancel := context.WithTimeout(ctx, 45*time.Second)
+		defer taskCancel()
 
-		// Получение цитаты на русском языке
-		quote, err := fetchQuoteService.FetchQuote(taskCtx)
-		if err != nil {
-			logger.Error("Ошибка получения цитаты", "error", err)
+		if err := sendQuote(taskCtx, fetchQuoteService, sendQuoteService); err != nil {
+			logger.ErrorContext(taskCtx, "Ошибка отправки цитаты", "operation", "scheduled_quote", "err", err)
 			return
 		}
 
-		// Отправка цитаты
-		if err := sendQuoteService.SendQuote(taskCtx, quote); err != nil {
-			logger.Error("Ошибка отправки цитаты", "error", err)
-		} else {
-			logger.Info("Цитата успешно отправлена", "quote", quote.Text, "author", quote.Author)
-		}
+		logger.InfoContext(taskCtx, "Цитата успешно отправлена", "operation", "scheduled_quote")
 	})
 	if err != nil {
-		logger.Error("Не удалось добавить cron-задачу", "error", err)
+		logger.Error("Не удалось добавить cron-задачу", "err", err)
 		os.Exit(1)
 	}
 
@@ -88,19 +79,13 @@ func main() {
 	// Отправка тестовой цитаты при запуске (если включено в конфигурации)
 	if cfg.SendTestQuote {
 		logger.Info("Отправка тестовой цитаты...")
-		testCtx := context.Background()
+		testCtx, testCancel := context.WithTimeout(ctx, 45*time.Second)
+		defer testCancel()
 
-		// Получение тестовой цитаты
-		testQuote, err := fetchQuoteService.FetchQuote(testCtx)
-		if err != nil {
-			logger.Error("Ошибка получения тестовой цитаты", "error", err)
+		if err := sendQuote(testCtx, fetchQuoteService, sendQuoteService); err != nil {
+			logger.ErrorContext(testCtx, "Ошибка отправки тестовой цитаты", "operation", "test_quote", "err", err)
 		} else {
-			// Отправка тестовой цитаты
-			if err := sendQuoteService.SendQuote(testCtx, testQuote); err != nil {
-				logger.Error("Ошибка отправки тестовой цитаты", "error", err)
-			} else {
-				logger.Info("Тестовая цитата успешно отправлена", "quote", testQuote.Text, "author", testQuote.Author)
-			}
+			logger.InfoContext(testCtx, "Тестовая цитата успешно отправлена", "operation", "test_quote")
 		}
 	} else {
 		logger.Info("Отправка тестовой цитаты отключена в конфигурации")
@@ -114,4 +99,17 @@ func main() {
 	stopCtx := c.Stop()
 	<-stopCtx.Done()
 	logger.Info("Планировщик остановлен. Программа завершена.")
+}
+
+func sendQuote(ctx context.Context, fetcher *usecases.FetchQuoteService, sender *usecases.SendQuoteService) error {
+	quote, err := fetcher.FetchQuote(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := sender.SendQuote(ctx, quote); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -3,6 +3,8 @@ package usecases
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 
 	"telegram-quotes-bot/internal/entities"
@@ -55,14 +57,14 @@ func TestFetchQuoteService_FetchQuote(t *testing.T) {
 				quote: nil,
 				err:   nil,
 			},
-			expectedErr:   false,
+			expectedErr:   true,
 			expectedQuote: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service := NewFetchQuoteService(tt.mockAPI)
+			service := NewFetchQuoteService(tt.mockAPI, testLogger())
 			ctx := context.Background()
 
 			quote, err := service.FetchQuote(ctx)
@@ -90,4 +92,8 @@ func TestFetchQuoteService_FetchQuote(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }

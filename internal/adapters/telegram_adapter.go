@@ -2,40 +2,79 @@ package adapters
 
 import (
 	"context"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
 )
 
 // TelegramAdapter реализует интерфейс TelegramSender для отправки сообщений в Telegram.
 type TelegramAdapter struct {
-	bot    *tgbotapi.BotAPI // Экземпляр бота API Telegram
-	chatID int64            // ID чата, куда будут отправляться сообщения
+	token  string
+	chatID int64
+	client *http.Client
+	logger *slog.Logger
 }
 
 // NewTelegramAdapter создаёт новый экземпляр TelegramAdapter.
 // Принимает токен бота (botToken) и ID чата (chatID).
-// Возвращает ошибку, если не удалось инициализировать бота.
-func NewTelegramAdapter(botToken string, chatID int64) (*TelegramAdapter, error) {
-	// Создаём новый экземпляр BotAPI с использованием токена бота
-	bot, err := tgbotapi.NewBotAPI(botToken)
-	if err != nil {
-		// Если произошла ошибка при инициализации бота, возвращаем её
-		return nil, err
+func NewTelegramAdapter(botToken string, chatID int64, logger *slog.Logger) *TelegramAdapter {
+	if logger == nil {
+		logger = slog.Default()
 	}
-	// Возвращаем инициализированный адаптер с ботом и ID чата
-	return &TelegramAdapter{bot: bot, chatID: chatID}, nil
+
+	return &TelegramAdapter{
+		token:  botToken,
+		chatID: chatID,
+		client: &http.Client{
+			Timeout: 15 * time.Second,
+		},
+		logger: logger.With("component", "telegram_adapter"),
+	}
 }
 
 // SendMessage отправляет текстовое сообщение в Telegram-чат.
 // Принимает контекст (ctx) и текст сообщения (message).
 // Возвращает ошибку, если сообщение не удалось отправить.
 func (t *TelegramAdapter) SendMessage(ctx context.Context, message string) error {
-	// Создаём новое текстовое сообщение для отправки в указанный чат
-	msg := tgbotapi.NewMessage(t.chatID, message)
+	form := url.Values{}
+	form.Set("chat_id", fmt.Sprintf("%d", t.chatID))
+	form.Set("text", message)
 
-	// Отправляем сообщение через API Telegram
-	_, err := t.bot.Send(msg)
+	endpoint := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.token)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("создать запрос Telegram: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	// Возвращаем ошибку, если отправка не удалась
-	return err
+	t.logger.InfoContext(ctx, "Отправка сообщения", "operation", "send_message", "chat_id", t.chatID)
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		t.logger.ErrorContext(ctx, "Ошибка запроса Telegram", "operation", "send_message", "chat_id", t.chatID, "err", err)
+		return fmt.Errorf("отправить запрос Telegram: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var telegramResp struct {
+		OK          bool   `json:"ok"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&telegramResp); err != nil {
+		t.logger.ErrorContext(ctx, "Ошибка декодирования ответа Telegram", "operation", "send_message", "chat_id", t.chatID, "err", err)
+		return fmt.Errorf("декодировать ответ Telegram: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK || !telegramResp.OK {
+		err := fmt.Errorf("telegram status=%d description=%q", resp.StatusCode, telegramResp.Description)
+		t.logger.ErrorContext(ctx, "Telegram вернул ошибку", "operation", "send_message", "chat_id", t.chatID, "err", err)
+		return err
+	}
+
+	t.logger.InfoContext(ctx, "Сообщение отправлено", "operation", "send_message", "chat_id", t.chatID)
+	return nil
 }

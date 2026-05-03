@@ -2,12 +2,14 @@ package adapters
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"testing"
 )
 
 func TestForismaticAPI_GetRandomQuote(t *testing.T) {
 	// Простой тест создания API
-	api := NewForismaticAPI()
+	api := NewForismaticAPI(testLogger())
 	if api == nil {
 		t.Error("Expected API instance, got nil")
 	}
@@ -43,11 +45,15 @@ func TestForismaticAPI_GetRandomQuote(t *testing.T) {
 }
 
 func TestNewForismaticAPI(t *testing.T) {
-	api := NewForismaticAPI()
+	api := NewForismaticAPI(testLogger())
 	if api == nil {
 		t.Error("Expected API instance, got nil")
 	}
 	if api.client == nil {
 		t.Error("Expected HTTP client, got nil")
 	}
+}
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }

@@ -1,66 +1,68 @@
 # Telegram Quotes Bot
 
-##### Telegram bot that automatically sends motivational quotes in Russian to the channel on a scheduled basis. The bot receives random quotes from Forismatic API and sends them to Telegram channel via Telegram Bot API.
+[Русская версия](README.ru.md)
+
+Telegram bot that automatically sends motivational quotes in Russian to a Telegram chat or channel on a schedule. The bot fetches random quotes from the Forismatic API and sends them through the Telegram Bot API.
 
 ## Features
-- ✅ Receiving random motivational quotes in Russian from Forismatic API
-- ✅ Sending quotes to Telegram channel on schedule (Cron)
-- ✅ Test quote sent on startup (configurable)
-- ✅ Graceful shutdown with signal handling
-- ✅ HTTP clients with timeouts for reliability
-- ✅ Input validation and security checks
-- ✅ Comprehensive unit tests
-- ✅ Safe logging (sensitive data masking)
-- ✅ Clean Architecture pattern
+- Receives random motivational quotes in Russian from the Forismatic API
+- Sends quotes to Telegram on a cron schedule
+- Can send a test quote on startup
+- Handles graceful shutdown with OS signals
+- Uses HTTP clients with timeouts
+- Validates configuration and external quote data
+- Uses structured logging with `log/slog`
+- Keeps a simple layered structure with use cases and adapters
 
 ## Technologies
-- **Programming language**: Go 1.23
-- **APIs**: Telegram Bot API, Forismatic API (Russian quotes)
-- **Task Scheduler**: Cron (robfig/cron/v3)
-- **Architecture**: Clean Architecture with dependency injection
-- **Testing**: Go testing framework with mocks
+- **Language**: Go 1.23
+- **APIs**: Telegram Bot API, Forismatic API
+- **Scheduler**: robfig/cron
+- **Architecture**: simple layered structure with dependency injection
+- **Testing**: Go testing package
 - **Containerization**: Docker
-- **Task Runner**: Taskfile
+- **Task runner**: Taskfile
 
 ## Project Structure
-```
-├── cmd/                    # Application entry point
+```text
+├── cmd/                   # Application entry point
 ├── internal/
 │   ├── adapters/          # External service adapters
-│   ├── config/            # Configuration management
-│   ├── entities/          # Domain models
-│   ├── interfaces/        # Service contracts
-│   ├── usecases/          # Business logic
+│   ├── config/            # Configuration loading
+│   ├── entities/          # Domain entities
+│   ├── usecases/          # Application scenarios
 │   └── validators/        # Input validation
-├── Dockerfile             # Container configuration
-├── Taskfile.yml          # Task automation
-└── env.example           # Environment variables template
+├── Dockerfile             # Container image
+├── Taskfile.yml           # Task automation
+└── README.ru.md           # Russian README
 ```
 
 ## Quick Start
 
 ### Prerequisites
 - Go 1.23+
-- Docker (optional)
-- Task (optional, for task automation)
+- Docker, optional
+- Task, optional
 
 ### Setup
-1. Clone the repository
-2. Copy `env.example` to `.env` and configure:
+1. Clone the repository.
+2. Create a `.env` file.
+3. Set the Telegram bot token and target chat ID:
    ```bash
-   cp env.example .env
+   BOT_TOKEN=123456789:your-token
+   CHAT_ID=-1001234567890
+   SEND_TEST_QUOTE=true
    ```
-3. Set your Telegram bot token and chat ID in `.env`
 
 ### Running
 ```bash
-# Using Go directly
+# Go
 go run cmd/main.go
 
-# Using Task
+# Task
 task run
 
-# Using Docker
+# Docker
 docker build -t telegram-quotes-bot .
 docker run --env-file .env telegram-quotes-bot
 ```
@@ -73,34 +75,34 @@ task test
 # Run tests with coverage
 task test-coverage
 
-# Build application
+# Build the app
 task build
 
-# Lint code
+# Run go vet and gofmt
 task lint
 
-# Clean artifacts
+# Remove build artifacts
 task clean
 ```
 
 ## Configuration
-The bot requires the following environment variables:
-- `BOT_TOKEN`: Your Telegram bot token (from @BotFather)
-- `CHAT_ID`: Target chat/channel ID for sending quotes
-- `SEND_TEST_QUOTE`: Send test quote on startup (true/false, default: true)
+The bot reads configuration from environment variables:
+- `BOT_TOKEN`: Telegram bot token from BotFather
+- `CHAT_ID`: target Telegram chat or channel ID
+- `SEND_TEST_QUOTE`: send a test quote on startup, `true` by default
 
 ## Schedule
-The bot sends quotes at: 4:00, 8:00, 14:00, and 18:00 daily (UTC).
+The bot sends quotes at `04:00`, `08:00`, `14:00`, and `18:00` every day.
 
-## API Information
-The bot uses [Forismatic API](http://api.forismatic.com/) to get random quotes in Russian:
+## API
+The bot uses the Forismatic API to fetch Russian quotes:
 - **Endpoint**: `http://api.forismatic.com/api/1.0/?method=getQuote&format=json&lang=ru`
-- **Response format**: JSON with `quoteText` and `quoteAuthor` fields
-- **Language**: Russian quotes directly from the API (no translation needed)
+- **Response fields**: `quoteText`, `quoteAuthor`
+- **Language**: Russian
 
-## Security Features
-- Input validation for all external data
-- XSS protection in quote content
-- Safe logging with token masking
-- HTTP timeouts to prevent hanging requests
-- Graceful shutdown handling
+## Security
+- Bot token is masked in logs
+- HTTP clients have timeouts
+- External quote data is validated before sending
+- Logs use short stable fields such as `err`, `operation`, and `component`
+- Secrets and raw tokens are not logged
